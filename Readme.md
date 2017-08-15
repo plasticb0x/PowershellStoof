@@ -6,9 +6,9 @@ A collection of various useful powershell scripts to be used for the good of man
 
 Tries to recursively pull back all the file paths from a defined starting directory. Takes around ~28 seconds to return 360,000+ file paths on test machine. Great for feeding into other scripts... File Parsing anyone?
 
-## PS-SSFind v0.0 - In Progress
+## PS-StringThing v0.0 - In Progress
 
-Parses files from a list of file paths (*cough*FSBang*cough*) to see if it can locate files with SS#'s in it. Then you can tell the rest of your security team why they're worrying about dumb things, but with DATA!
+Parses files from a list of file paths (*cough*FSBang*cough*) to see if it can locate files with a particular regex string. Originally was just going to be a PII searcher but decided to generlize it more.
 
 ## Licence
 CC BY 4.0 licence - https://creativecommons.org/licenses/by/4.0/
