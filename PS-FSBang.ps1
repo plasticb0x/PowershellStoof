@@ -5,18 +5,23 @@
 #Implements a new runspace for each directory at the starting path defined below.
 #
 #Future plans: Expand runspace creation to something like "if subdir > 20 dir"
+#
+#Side notes/reminders: net view
+# Get-WmiObject -Query 'Select * from win32_share where not name like "%$%" and not name like "%users%" and not name like "%driver%"' -ComputerName <compName> | select name
+# pushd \\UNCPath\Here
+# cmd /r 'pushd \\<host>\<shareFolder> & dir /b /a-d /s'
 
-#Path to start scanning from, can be UNC
 $startingPath = "C:\"
+$maxThreads = 4
 
 #Setup pool and various vars
-$pool = [RunspaceFactory]::CreateRunspacePool(1, 20) #Params define the minimum,maximum runspaces that can be running for the pool
+$pool = [RunspaceFactory]::CreateRunspacePool(1, $maxThreads) #Params define the minimum,maximum runspaces that can be running for the pool
 $pool.ApartmentState = "MTA"
 $pool.Open()
 $runspaces = @()
 $results = @()
 
-$rootDir = ([System.IO.DirectoryInfo]($startingPath)).GetDirectories().FullName
+$rootDir = cmd /r dir "$startingPath" /b /ad
 $pathList = New-Object System.Collections.ArrayList
 
 #Workhorse Scriptblock
@@ -24,35 +29,24 @@ $scriptBlock = {
     Param (
     [parameter(Mandatory=$true)]
 	[string]
-    $filePath
+    $hostName
 	)
 
-    $scriptList = New-Object System.Collections.ArrayList
+    $internalList = New-Object System.Collections.ArrayList
 
-    function RecursiveDirectoryRetrieve{
+    $shareNames = Get-WmiObject -Query 'Select * from win32_share where not name like "%$%" and not name like "%users%" and not name like "%driver%"' -ComputerName $hostName | select name
+
+    function GetAllFilePaths{
         Param(
         [parameter(Mandatory=$true)]
         [String]
         $tmpDir 
         )
 
-        $success = $true
-    
-        try{
-            $internalDirectory = ([System.IO.DirectoryInfo]($tmpDir)).GetDirectories().FullName
-        }
-        catch{
-            #Trying to break on the function seems to break the script block? Doing dumb bool thing here
-            $success = $false
-        }
-
-        if ($success){
-            foreach ($dir in $internalDirectory){
-                $tmpFiles = ([System.IO.DirectoryInfo]($dir)).GetFiles().FullName
-                foreach ($tmpFile in $tmpFiles){
-                    $scriptList.Add($tmpFile) | out-null
-                }
-                RecursiveDirectoryRetrieve $dir
+        foreach ($share in $shareNames){
+            $tmpFiles = cmd /r dir "$startingPath\$dir" /b /s /a-d
+            foreach ($tmpFile in $tmpFiles){
+                $scriptList.Add($tmpFile) | out-null
             }
         }
     }
