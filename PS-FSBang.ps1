@@ -79,14 +79,16 @@ function PS-FSBang{
 
     $x = 0
     foreach ($runspace in $runspaces ) {
-
         $percentComplete = [math]::Round(100*$x/$runspaces.Status.count, 2)
         Write-Progress -Activity "Getting results... $percentComplete%" -Status "Getting all the results: $x of $($runspaces.Status.count) results left..." -PercentComplete $percentComplete
 
 	    $tmpReturn = $runspace.Pipe.EndInvoke($runspace.Status)
+
+        if ($tmpReturn[1] -ne $null){
+            $returnedValues[$tmpReturn[0]] += @($tmpReturn[1..$tmpReturn.Count])
+	        $runspace.Pipe.Dispose() | Out-Null
+        }
         
-        $returnedValues[$tmpReturn[0]] += @($tmpReturn[1..$tmpReturn.Count])
-	    $runspace.Pipe.Dispose() | Out-Null
         $x++
     }
 
