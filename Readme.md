@@ -2,9 +2,9 @@
 
 A collection of various useful powershell scripts to be used for the good of mankind. Srsly. Not for use in anything bad.
 
-## PS-FSBang v0.1
+## PS-FSBang v0.2
 
-Tries to recursively pull back all the file paths from a defined starting directory. Takes around ~28 seconds to return 360,000+ file paths on test machine. Great for feeding into other scripts... File Parsing anyone?
+With a provided list of servers, will iterate through all visible, non-default file network shares and pull back all the accessible filepaths therein.
 
 ## PS-StringThing v0.0 - In Progress
 

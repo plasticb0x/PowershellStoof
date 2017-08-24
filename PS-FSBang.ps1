@@ -1,94 +1,98 @@
 ﻿#plasticB0x
-#Extra Creds: potatoqualitee@github for Runspace powershell template
+#Extra Creds: 
+#potatoqualitee@github for initial Runspace powershell template
+#PowerShellMafia@github for some tips out of PowerSploit
 #
-#Descrip: Quickly rummages through Windows file system, returns all file paths.
-#Implements a new runspace for each directory at the starting path defined below.
+#Descrip: Quickly rummages through Windows network share file system, returns all file paths.
 #
-#Future plans: Expand runspace creation to something like "if subdir > 20 dir"
-#
-#Side notes/reminders: net view
-# Get-WmiObject -Query 'Select * from win32_share where not name like "%$%" and not name like "%users%" and not name like "%driver%"' -ComputerName <compName> | select name
-# pushd \\UNCPath\Here
-# cmd /r 'pushd \\<host>\<shareFolder> & dir /b /a-d /s'
+#Usage [1]: PS-FSBang C:\ServerList.txt    #Defaults to 4 runspace threads
+#Usage [2]: Ps-FSBang C:\ServerList.txt 8  #Uses 8 threads instead of default 4
+#-------------------------------------------------------------------------------------------
 
-$startingPath = "C:\"
-$maxThreads = 4
-
-#Setup pool and various vars
-$pool = [RunspaceFactory]::CreateRunspacePool(1, $maxThreads) #Params define the minimum,maximum runspaces that can be running for the pool
-$pool.ApartmentState = "MTA"
-$pool.Open()
-$runspaces = @()
-$results = @()
-
-$rootDir = cmd /r dir "$startingPath" /b /ad
-$pathList = New-Object System.Collections.ArrayList
-
-#Workhorse Scriptblock
-$scriptBlock = {
+function PS-FSBang{
     Param (
-    [parameter(Mandatory=$true)]
-	[string]
-    $hostName
-	)
-
-    $internalList = New-Object System.Collections.ArrayList
-
-    $shareNames = Get-WmiObject -Query 'Select * from win32_share where not name like "%$%" and not name like "%users%" and not name like "%driver%"' -ComputerName $hostName | select name
-
-    function GetAllFilePaths{
-        Param(
         [parameter(Mandatory=$true)]
-        [String]
-        $tmpDir 
-        )
+	    [String[]]
+        $importedServers,
+
+        [Int]
+        $maxThreads = 4
+    )
+
+    $returnedValues = @{}
+
+    #Core pull block
+    $scriptBlock = {
+        Param (
+        [parameter(Mandatory=$true)]
+	    [string]
+        $tmpHostName
+	    )
+        
+        $returnArray = @("$tmpHostName")
+
+        $shareNames = Get-WmiObject -Query 'Select * from win32_share where not name like "%$%" and not name like "%users%" and not name like "%driver%"' -ComputerName $tmpHostName | select name
 
         foreach ($share in $shareNames){
-            $tmpFiles = cmd /r dir "$startingPath\$dir" /b /s /a-d
-            foreach ($tmpFile in $tmpFiles){
-                $scriptList.Add($tmpFile) | out-null
+            $shareString = "\\$tmpHostName\$($share.name)"
+            $dirFind += @(cmd /r "pushd `"$shareString`" & dir /b /s /a-d & popd `"$shareString`"")
+
+            foreach ($find in $dirFind){
+                $tmpFile = "$shareString\$($find.Substring(3))"
+                $returnArray += @($tmpFile)
             }
         }
+
+        return $returnArray
+        
     }
 
-    RecursiveDirectoryRetrieve $filePath
-	return $scriptList
-}
+    $serverNames = [System.IO.File]::ReadAllLines($importedServers)
 
-foreach ($dir in $rootDir){
-    #Create/Queue runspaces for each top level folder
-    $runspace = [PowerShell]::Create()
-    $runspace.AddScript($scriptBlock) | Out-Null #microsoftWhy
-    $runspace.AddArgument($dir) | Out-Null #microsoftWhy
-    $runspace.RunspacePool = $pool #So funky... This is how you assign the runspace to a pool
-    $runspaces += [PSCustomObject]@{Pipe = $runspace; Status = $runspace.BeginInvoke() }
-}
+    #Setup pool and various vars
+    $pool = [RunspaceFactory]::CreateRunspacePool(1, $maxThreads) #Params define the minimum,maximum runspaces that can be running for the pool
+    $pool.ApartmentState = "MTA"
+    $pool.Open()
+    $runspaces = @()
+    $results = @()
 
-while ($runspaces.Status.IsCompleted -contains $false){
-    $trueCount = ($runspaces.Status | where -Property IsCompleted -eq $true).count
-    $percentComplete = [math]::Round(100*$trueCount/$runspaces.Status.count, 2)
-    Write-Progress -Activity "Iterating through directories... $percentComplete%" -Status "Runspaces: $trueCount of $($runspaces.Status.count) left..." -PercentComplete $percentComplete
-}
+    foreach ($server in $importedServers){
+        $returnedValues["$server"] = @()
 
-$x = 0
-foreach ($runspace in $runspaces ) {
-
-    $percentComplete = [math]::Round(100*$x/$runspaces.Status.count, 2)
-    Write-Progress -Activity "Getting results... $percentComplete%" -Status "Getting all the results: $x of $($runspaces.Status.count) results left..." -PercentComplete $percentComplete
-
-	$result = @($runspace.Pipe.EndInvoke($runspace.Status))
-    
-    foreach ($intResult in $result){
-        $pathList.Add($intResult) | Out-null
+        #Create/Queue runspaces for each top level folder
+        $runspace = [PowerShell]::Create()
+        $runspace.AddScript($scriptBlock) | Out-Null #microsoftWhy
+        $runspace.AddArgument($server) | Out-Null #microsoftWhy
+        $runspace.RunspacePool = $pool #So funky... This is how you assign the runspace to a pool
+        $runspaces += [PSCustomObject]@{Pipe = $runspace; Status = $runspace.BeginInvoke() }
     }
 
-	$runspace.Pipe.Dispose()
-    $x++
+    while ($runspaces.Status.IsCompleted -contains $false){
+        $trueCount = ($runspaces.Status | where -Property IsCompleted -eq $true).count
+        $percentComplete = [math]::Round(100*$trueCount/$runspaces.Status.count, 2)
+        Write-Progress -Activity "Iterating through directories... $percentComplete%" -Status "Runspaces: $trueCount of $($runspaces.Status.count) left..." -PercentComplete $percentComplete
+
+        Start-Sleep -MilliSeconds 500
+    }
+
+    $x = 0
+    foreach ($runspace in $runspaces ) {
+
+        $percentComplete = [math]::Round(100*$x/$runspaces.Status.count, 2)
+        Write-Progress -Activity "Getting results... $percentComplete%" -Status "Getting all the results: $x of $($runspaces.Status.count) results left..." -PercentComplete $percentComplete
+
+	    $tmpReturn = $runspace.Pipe.EndInvoke($runspace.Status)
+        
+        $returnedValues[$tmpReturn[0]] += @($tmpReturn[1..$tmpReturn.Count])
+	    $runspace.Pipe.Dispose()
+        $x++
+    }
+
+    $pool.Close() 
+    $pool.Dispose
+
+    $returnedValues
+
+    Write-Host "Done getting results..."
+
 }
-
-$pool.Close() 
-$pool.Dispose()
-
-Write-Host "Done getting results..."
-Write-Host "PS-FSBang completed... Found $($pathList.Count) files."
-Write-Host 'File paths are in $pathList variable'
