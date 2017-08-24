@@ -7,6 +7,8 @@
 #
 #Usage [1]: PS-FSBang C:\ServerList.txt    #Defaults to 4 runspace threads
 #Usage [2]: Ps-FSBang C:\ServerList.txt 8  #Uses 8 threads instead of default 4
+#
+#To Do: Add export option/bool
 #-------------------------------------------------------------------------------------------
 
 function PS-FSBang{
@@ -30,19 +32,19 @@ function PS-FSBang{
 	    )
         
         $returnArray = @("$tmpHostName")
-
+        
         $shareNames = Get-WmiObject -Query 'Select * from win32_share where not name like "%$%" and not name like "%users%" and not name like "%driver%"' -ComputerName $tmpHostName | select name
 
         foreach ($share in $shareNames){
             $shareString = "\\$tmpHostName\$($share.name)"
-            $dirFind += @(cmd /r "pushd `"$shareString`" & dir /b /s /a-d & popd `"$shareString`"")
+            $dirFind = @(cmd /r "pushd `"$shareString`" & dir /b /s /a-d & popd `"$shareString`"")
 
-            foreach ($find in $dirFind){
-                $tmpFile = "$shareString\$($find.Substring(3))"
+            foreach ($file in $dirFind){
+                $tmpFile = "$shareString\$($file.Substring(3))"
                 $returnArray += @($tmpFile)
             }
         }
-
+        
         return $returnArray
         
     }
@@ -56,7 +58,7 @@ function PS-FSBang{
     $runspaces = @()
     $results = @()
 
-    foreach ($server in $importedServers){
+    foreach ($server in $serverNames){
         $returnedValues["$server"] = @()
 
         #Create/Queue runspaces for each top level folder
@@ -84,15 +86,16 @@ function PS-FSBang{
 	    $tmpReturn = $runspace.Pipe.EndInvoke($runspace.Status)
         
         $returnedValues[$tmpReturn[0]] += @($tmpReturn[1..$tmpReturn.Count])
-	    $runspace.Pipe.Dispose()
+	    $runspace.Pipe.Dispose() | Out-Null
         $x++
     }
 
     $pool.Close() 
-    $pool.Dispose
+    $pool.Dispose | out-null
 
     $returnedValues
 
+    Write-Host ""
     Write-Host "Done getting results..."
 
 }
