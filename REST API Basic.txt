@@ -1,0 +1,5 @@
+$uri = "https://SomeURI.com"
+$response = Invoke-RestMethod -Uri $uri -Method Post
+$response.title
+$response.count
+$response[0] | format-list

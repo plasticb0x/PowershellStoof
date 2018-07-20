@@ -1,0 +1,3 @@
+[System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String("Encoded_String_Here"))
+
+[System.Text.Encoding]::ASCII.GetString([System.Convert]::FromBase64String("Encoded_String_Here"))
